@@ -84,7 +84,7 @@ services:
       - web
 
   admin:
-    image: mds/plane-admin:latest
+    image: makeplane/plane-admin:${APP_RELEASE:-v1.3.1}
     deploy:
       replicas: ${ADMIN_REPLICAS:-1}
       restart_policy:
