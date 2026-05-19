@@ -1,0 +1,33 @@
+(plane_routes) {
+	request_body {
+		max_size {$FILE_SIZE_LIMIT:5242880}
+	}
+
+	redir /spaces /spaces/ permanent
+	reverse_proxy /spaces/* space:3000
+
+	redir /god-mode /god-mode/ permanent
+	reverse_proxy /god-mode/* admin:3000
+
+	reverse_proxy /live/* live:3000
+
+	reverse_proxy /api/* api:8000
+	reverse_proxy /auth/* api:8000
+	reverse_proxy /static/* api:8000
+
+	reverse_proxy /{$AWS_S3_BUCKET_NAME:uploads}/* plane-minio:9000
+	reverse_proxy /{$AWS_S3_BUCKET_NAME:uploads} plane-minio:9000
+
+	reverse_proxy /* web:3000
+}
+
+{
+	email {$CADDY_ACME_EMAIL}
+	servers {
+		max_header_size 25MB
+	}
+}
+
+{$APP_DOMAIN} {
+	import plane_routes
+}

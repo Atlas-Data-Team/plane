@@ -32,7 +32,7 @@ wait_for_http() {
 
   log "Waiting for ${name} (${url}) — max ${MAX_WAIT_SECONDS}s"
   while [ "${elapsed}" -lt "${MAX_WAIT_SECONDS}" ]; do
-    if curl -fsS -o /dev/null --max-time 10 "${url}"; then
+    if curl -fsSL -o /dev/null --max-time 10 "${url}"; then
       log "${name} is healthy (${elapsed}s)"
       return 0
     fi
@@ -56,11 +56,11 @@ deploy_web_only() {
   ensure_infra
 
   log "Recreating web only (skip migrator — no API/DB schema change expected)"
-  docker compose -f "${COMPOSE_FILE}" up -d --no-recreate api worker beat-worker space admin live proxy
+  docker compose -f "${COMPOSE_FILE}" up -d --no-recreate api worker beat-worker space admin live caddy
   docker compose -f "${COMPOSE_FILE}" up -d --force-recreate web
   docker compose -f "${COMPOSE_FILE}" up -d --wait web 2>/dev/null || true
 
-  wait_for_http "${HEALTH_URL}/" "Plane web (via proxy)"
+  wait_for_http "${HEALTH_URL}/" "Plane web (via caddy)"
 }
 
 deploy_api_only() {
@@ -73,13 +73,13 @@ deploy_api_only() {
   docker compose -f "${COMPOSE_FILE}" run --rm migrator
 
   log "Recreating API and workers only"
-  docker compose -f "${COMPOSE_FILE}" up -d --no-recreate web space admin live proxy
+  docker compose -f "${COMPOSE_FILE}" up -d --no-recreate web space admin live caddy
   docker compose -f "${COMPOSE_FILE}" up -d --force-recreate api worker beat-worker
   docker compose -f "${COMPOSE_FILE}" up -d --wait api
 
-  wait_for_http "${HEALTH_URL}/api/instances/" "Plane API (via proxy)" || \
-    wait_for_http "${HEALTH_URL}/auth/" "Plane API auth (via proxy)"
-  wait_for_http "${HEALTH_URL}/" "Plane web (via proxy)"
+  wait_for_http "${HEALTH_URL}/api/instances/" "Plane API (via caddy)" || \
+    wait_for_http "${HEALTH_URL}/auth/" "Plane API auth (via caddy)"
+  wait_for_http "${HEALTH_URL}/" "Plane web (via caddy)"
 }
 
 deploy_full() {
@@ -96,12 +96,12 @@ deploy_full() {
   docker compose -f "${COMPOSE_FILE}" up -d --wait api
 
   docker compose -f "${COMPOSE_FILE}" up -d --force-recreate web
-  docker compose -f "${COMPOSE_FILE}" up -d --no-recreate space admin live proxy
-  docker compose -f "${COMPOSE_FILE}" up -d --wait web proxy 2>/dev/null || true
+  docker compose -f "${COMPOSE_FILE}" up -d --no-recreate space admin live caddy
+  docker compose -f "${COMPOSE_FILE}" up -d --wait web caddy 2>/dev/null || true
 
-  wait_for_http "${HEALTH_URL}/" "Plane web (via proxy)"
-  wait_for_http "${HEALTH_URL}/api/instances/" "Plane API (via proxy)" || \
-    wait_for_http "${HEALTH_URL}/auth/" "Plane API auth (via proxy)"
+  wait_for_http "${HEALTH_URL}/" "Plane web (via caddy)"
+  wait_for_http "${HEALTH_URL}/api/instances/" "Plane API (via caddy)" || \
+    wait_for_http "${HEALTH_URL}/auth/" "Plane API auth (via caddy)"
 }
 
 cd "${DEPLOY_PATH:-$HOME/plane}"
