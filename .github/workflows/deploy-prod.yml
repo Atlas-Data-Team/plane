@@ -1,0 +1,238 @@
+name: Build and Deploy Production
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - "apps/api/**"
+      - "apps/web/**"
+      - "docker-compose-prod.yaml"
+      - "build.sh"
+      - ".github/workflows/deploy-prod.yml"
+      - "deploy/**"
+  workflow_dispatch:
+    inputs:
+      deploy_scope:
+        description: "What to build and deploy (auto = detect from changed files)"
+        required: false
+        default: auto
+        type: choice
+        options:
+          - auto
+          - web
+          - api
+          - full
+
+concurrency:
+  group: deploy-prod-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOCKERHUB_BACKEND_IMAGE: mdsteam/plane-backend
+  DOCKERHUB_WEB_IMAGE: mdsteam/plane-web
+  DEPLOY_PATH: /home/ubuntu/plane
+  COMPOSE_FILE: docker-compose-prod.yaml
+
+jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.meta.outputs.short_sha }}
+      build_web: ${{ steps.scope.outputs.build_web }}
+      build_api: ${{ steps.scope.outputs.build_api }}
+      deploy_scope: ${{ steps.scope.outputs.deploy_scope }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Docker meta
+        id: meta
+        run: echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Paths filter
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            web:
+              - 'apps/web/**'
+            api:
+              - 'apps/api/**'
+            config:
+              - 'docker-compose-prod.yaml'
+              - 'deploy/**'
+              - '.github/workflows/deploy-prod.yml'
+              - 'build.sh'
+
+      - name: Resolve build and deploy scope
+        id: scope
+        run: |
+          WEB="${{ steps.filter.outputs.web }}"
+          API="${{ steps.filter.outputs.api }}"
+          CONFIG="${{ steps.filter.outputs.config }}"
+          MANUAL="${{ github.event.inputs.deploy_scope || 'auto' }}"
+
+          if [ "$MANUAL" = "web" ]; then
+            echo "build_web=true" >> "$GITHUB_OUTPUT"
+            echo "build_api=false" >> "$GITHUB_OUTPUT"
+            echo "deploy_scope=web" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$MANUAL" = "api" ]; then
+            echo "build_web=false" >> "$GITHUB_OUTPUT"
+            echo "build_api=true" >> "$GITHUB_OUTPUT"
+            echo "deploy_scope=api" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$MANUAL" = "full" ]; then
+            echo "build_web=true" >> "$GITHUB_OUTPUT"
+            echo "build_api=true" >> "$GITHUB_OUTPUT"
+            echo "deploy_scope=full" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # auto (push): web-only when only apps/web changed
+          if [ "$WEB" = "true" ] && [ "$API" != "true" ] && [ "$CONFIG" != "true" ]; then
+            echo "build_web=true" >> "$GITHUB_OUTPUT"
+            echo "build_api=false" >> "$GITHUB_OUTPUT"
+            echo "deploy_scope=web" >> "$GITHUB_OUTPUT"
+          elif [ "$API" = "true" ] && [ "$WEB" != "true" ] && [ "$CONFIG" != "true" ]; then
+            echo "build_web=false" >> "$GITHUB_OUTPUT"
+            echo "build_api=true" >> "$GITHUB_OUTPUT"
+            echo "deploy_scope=api" >> "$GITHUB_OUTPUT"
+          else
+            echo "build_web=true" >> "$GITHUB_OUTPUT"
+            echo "build_api=true" >> "$GITHUB_OUTPUT"
+            echo "deploy_scope=full" >> "$GITHUB_OUTPUT"
+          fi
+
+  build-and-push:
+    name: Build and push Docker images
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.build_web == 'true' || needs.changes.outputs.build_api == 'true'
+    permissions:
+      contents: read
+      actions: write
+    outputs:
+      image_tag: ${{ needs.changes.outputs.image_tag }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push backend
+        if: needs.changes.outputs.build_api == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./apps/api
+          file: ./apps/api/Dockerfile.api
+          push: true
+          tags: |
+            ${{ env.DOCKERHUB_BACKEND_IMAGE }}:latest
+            ${{ env.DOCKERHUB_BACKEND_IMAGE }}:${{ needs.changes.outputs.image_tag }}
+            ${{ env.DOCKERHUB_BACKEND_IMAGE }}:buildcache
+          cache-from: |
+            type=gha,scope=plane-backend
+            type=registry,ref=${{ env.DOCKERHUB_BACKEND_IMAGE }}:buildcache
+            type=registry,ref=${{ env.DOCKERHUB_BACKEND_IMAGE }}:latest
+          cache-to: |
+            type=gha,mode=max,scope=plane-backend
+            type=registry,ref=${{ env.DOCKERHUB_BACKEND_IMAGE }}:buildcache,mode=max
+
+      - name: Build and push web
+        if: needs.changes.outputs.build_web == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./apps/web/Dockerfile.web
+          push: true
+          tags: |
+            ${{ env.DOCKERHUB_WEB_IMAGE }}:latest
+            ${{ env.DOCKERHUB_WEB_IMAGE }}:${{ needs.changes.outputs.image_tag }}
+            ${{ env.DOCKERHUB_WEB_IMAGE }}:buildcache
+          cache-from: |
+            type=gha,scope=plane-web
+            type=registry,ref=${{ env.DOCKERHUB_WEB_IMAGE }}:buildcache
+            type=registry,ref=${{ env.DOCKERHUB_WEB_IMAGE }}:latest
+          cache-to: |
+            type=gha,mode=max,scope=plane-web
+            type=registry,ref=${{ env.DOCKERHUB_WEB_IMAGE }}:buildcache,mode=max
+
+  deploy:
+    name: Deploy to VM
+    runs-on: ubuntu-latest
+    needs: [changes, build-and-push]
+    if: |
+      always() &&
+      needs.changes.result == 'success' &&
+      (needs.build-and-push.result == 'success' || needs.build-and-push.result == 'skipped') &&
+      github.event_name != 'pull_request'
+
+    steps:
+      # One SSH session: git pull (includes deploy/prod-deploy.sh) + run deploy.
+      # Avoids extra SCP connections that often fail with "ssh: handshake failed: EOF".
+      - name: Sync and deploy on VM
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          IMAGE_TAG: ${{ needs.changes.outputs.image_tag }}
+          DEPLOY_PATH: ${{ env.DEPLOY_PATH }}
+          COMPOSE_FILE: ${{ env.COMPOSE_FILE }}
+          DEPLOY_SCOPE: ${{ needs.changes.outputs.deploy_scope }}
+          HEALTH_URL: http://127.0.0.1:80
+          MAX_WAIT_SECONDS: "120"
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: 22
+          timeout: 300s
+          command_timeout: 30m
+          envs: IMAGE_TAG,DEPLOY_PATH,COMPOSE_FILE,DEPLOY_SCOPE,HEALTH_URL,MAX_WAIT_SECONDS
+          script: |
+            set -euo pipefail
+            export IMAGE_TAG="${IMAGE_TAG}"
+            export DEPLOY_PATH="${DEPLOY_PATH}"
+            export COMPOSE_FILE="${COMPOSE_FILE}"
+            export DEPLOY_SCOPE="${DEPLOY_SCOPE}"
+            export HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:80}"
+            export MAX_WAIT_SECONDS="${MAX_WAIT_SECONDS:-120}"
+
+            retry() {
+              local attempt=1
+              local max_attempts=3
+              local delay=20
+              until "$@"; do
+                if [ "${attempt}" -ge "${max_attempts}" ]; then
+                  echo "Command failed after ${max_attempts} attempts: $*"
+                  return 1
+                fi
+                echo "Retry ${attempt}/${max_attempts} in ${delay}s: $*"
+                sleep "${delay}"
+                attempt=$((attempt + 1))
+              done
+            }
+
+            cd "${DEPLOY_PATH}"
+            if [ -f deploy/prod-deploy.sh ] && ! git ls-files --error-unmatch deploy/prod-deploy.sh >/dev/null 2>&1; then
+              rm -f deploy/prod-deploy.sh
+            fi
+            retry git pull --ff-only
+            chmod +x deploy/prod-deploy.sh
+            export SKIP_GIT_PULL=1
+            ./deploy/prod-deploy.sh
