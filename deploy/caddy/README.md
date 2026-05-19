@@ -4,13 +4,13 @@ Replaces `plane-proxy` for `docker-compose-prod.yaml`. Routes match [apps/proxy/
 
 ## VM rollout (after `git pull`)
 
-1. **DNS:** `dig plane.metasolutions.software` should point at the VM public IP.
+1. **DNS:** `dig projects.metasolutions.software` should point at the VM public IP.
 2. **`.env` on the server** (example):
 
    ```env
-   APP_DOMAIN=plane.metasolutions.software
-   WEB_URL=https://plane.metasolutions.software
-   CORS_ALLOWED_ORIGINS=https://plane.metasolutions.software
+   APP_DOMAIN=projects.metasolutions.software
+   WEB_URL=https://projects.metasolutions.software
+   CORS_ALLOWED_ORIGINS=https://projects.metasolutions.software
    LIVE_SERVER_SECRET_KEY=<random-secret>
    AMQP_URL=amqp://plane:plane@plane-mq:5672/plane
    ```
@@ -34,7 +34,7 @@ Replaces `plane-proxy` for `docker-compose-prod.yaml`. Routes match [apps/proxy/
    ```bash
    docker compose -f docker-compose-prod.yaml ps
    docker compose -f docker-compose-prod.yaml logs caddy --tail 50
-   curl -fsSL https://plane.metasolutions.software/api/instances/
+   curl -fsSL https://projects.metasolutions.software/api/instances/
    ```
 
 6. **Optional cleanup** of orphaned volumes: `proxy_config`, `proxy_data`.
