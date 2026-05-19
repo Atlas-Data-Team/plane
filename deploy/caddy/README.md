@@ -11,7 +11,6 @@ Replaces `plane-proxy` for `docker-compose-prod.yaml`. Routes match [apps/proxy/
    APP_DOMAIN=plane.metasolutions.software
    WEB_URL=https://plane.metasolutions.software
    CORS_ALLOWED_ORIGINS=https://plane.metasolutions.software
-   CADDY_ACME_EMAIL=it.department@metasolutions.software
    LIVE_SERVER_SECRET_KEY=<random-secret>
    AMQP_URL=amqp://plane:plane@plane-mq:5672/plane
    ```

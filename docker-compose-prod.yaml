@@ -257,7 +257,6 @@ services:
       APP_DOMAIN: ${APP_DOMAIN:-localhost}
       AWS_S3_BUCKET_NAME: ${AWS_S3_BUCKET_NAME:-uploads}
       FILE_SIZE_LIMIT: ${FILE_SIZE_LIMIT:-5242880}
-      CADDY_ACME_EMAIL: ${CADDY_ACME_EMAIL:-}
     ports:
       - "${LISTEN_HTTP_PORT:-80}:80"
       - "${LISTEN_HTTPS_PORT:-443}:443"
