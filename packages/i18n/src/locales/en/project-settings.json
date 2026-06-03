@@ -154,6 +154,7 @@
           "label": "Categories",
           "t_shirt_sizes": "T-Shirt Sizes",
           "easy_to_hard": "Easy to hard",
+          "clickup_duration": "Duration (ClickUp-style)",
           "custom": "Custom"
         },
         "time": {

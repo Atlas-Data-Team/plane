@@ -154,6 +154,7 @@
           "label": "Danh mục",
           "t_shirt_sizes": "Kích cỡ áo",
           "easy_to_hard": "Dễ đến khó",
+          "clickup_duration": "Thời lượng (kiểu ClickUp)",
           "custom": "Tùy chỉnh"
         },
         "time": {
