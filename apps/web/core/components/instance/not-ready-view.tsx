@@ -4,7 +4,6 @@
  * See the LICENSE file for details.
  */
 
-import Link from "next/link";
 import { GOD_MODE_URL } from "@plane/constants";
 // assets
 import GradientLogo from "@/app/assets/auth/gradient-logo.webp?url";
@@ -39,7 +38,7 @@ export function InstanceNotReady() {
             <div className="flex flex-col items-center gap-11">
               <img src={GradientLogo} className="h-24 w-40 object-contain" alt="Plane Logo" />
               <div className="flex max-w-124 flex-col items-center gap-3">
-                <h1 className="text-h2-semibold text-primary">Welcome to Plane</h1>
+                <h1 className="text-h2-semibold text-primary">Welcome to Plane, MDS</h1>
                 <p className="text-center text-body-md-regular text-secondary">
                   Set up your instance and create your first workspace to begin managing projects and work.
                 </p>
