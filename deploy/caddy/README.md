@@ -37,4 +37,6 @@ Replaces `plane-proxy` for `docker-compose-prod.yaml`. Routes match [apps/proxy/
    curl -fsSL https://projects.metasolutions.software/api/instances/
    ```
 
+   Post-deploy health checks in `deploy/prod-deploy.sh` use `https://${APP_DOMAIN}` from `.env` (not `http://127.0.0.1`), so they match Caddy TLS on your public domain.
+
 6. **Optional cleanup** of orphaned volumes: `proxy_config`, `proxy_data`.

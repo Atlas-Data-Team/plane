@@ -5,13 +5,41 @@ set -euo pipefail
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose-prod.yaml}"
 export IMAGE_TAG="${IMAGE_TAG:-latest}"
 DEPLOY_SCOPE="${DEPLOY_SCOPE:-full}"
-HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:${LISTEN_HTTP_PORT:-80}}"
+HEALTH_URL="${HEALTH_URL:-}"
 MAX_WAIT_SECONDS="${MAX_WAIT_SECONDS:-180}"
 POLL_INTERVAL_SECONDS="${POLL_INTERVAL_SECONDS:-5}"
 SKIP_GIT_PULL="${SKIP_GIT_PULL:-0}"
 
 log() {
   echo "[deploy] scope=${DEPLOY_SCOPE} tag=${IMAGE_TAG} — $*"
+}
+
+# Prefer https://APP_DOMAIN from .env (matches Caddy TLS). Override with HEALTH_URL if needed.
+resolve_health_url() {
+  local env_file="${1:-.env}"
+
+  if [ -n "${HEALTH_URL}" ]; then
+    log "Health check URL: ${HEALTH_URL} (from environment)"
+    return
+  fi
+
+  if [ -f "${env_file}" ]; then
+    local domain
+    domain="$(
+      grep -E '^[[:space:]]*APP_DOMAIN=' "${env_file}" | tail -1 | cut -d= -f2- |
+        sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//"
+    )"
+    if [ -n "${domain}" ] && [ "${domain}" != "localhost" ]; then
+      HEALTH_URL="https://${domain}"
+      export HEALTH_URL
+      log "Health check URL: ${HEALTH_URL} (from ${env_file} APP_DOMAIN)"
+      return
+    fi
+  fi
+
+  HEALTH_URL="http://127.0.0.1:${LISTEN_HTTP_PORT:-80}"
+  export HEALTH_URL
+  log "Health check URL: ${HEALTH_URL} (localhost fallback)"
 }
 
 safe_git_pull() {
@@ -105,6 +133,7 @@ deploy_full() {
 }
 
 cd "${DEPLOY_PATH:-$HOME/plane}"
+resolve_health_url
 
 if [ "${SKIP_GIT_PULL}" != "1" ]; then
   safe_git_pull
