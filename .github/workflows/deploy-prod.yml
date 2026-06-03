@@ -194,7 +194,6 @@ jobs:
           DEPLOY_PATH: ${{ env.DEPLOY_PATH }}
           COMPOSE_FILE: ${{ env.COMPOSE_FILE }}
           DEPLOY_SCOPE: ${{ needs.changes.outputs.deploy_scope }}
-          HEALTH_URL: http://127.0.0.1:80
           MAX_WAIT_SECONDS: "120"
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -203,14 +202,13 @@ jobs:
           port: 22
           timeout: 300s
           command_timeout: 30m
-          envs: IMAGE_TAG,DEPLOY_PATH,COMPOSE_FILE,DEPLOY_SCOPE,HEALTH_URL,MAX_WAIT_SECONDS
+          envs: IMAGE_TAG,DEPLOY_PATH,COMPOSE_FILE,DEPLOY_SCOPE,MAX_WAIT_SECONDS
           script: |
             set -euo pipefail
             export IMAGE_TAG="${IMAGE_TAG}"
             export DEPLOY_PATH="${DEPLOY_PATH}"
             export COMPOSE_FILE="${COMPOSE_FILE}"
             export DEPLOY_SCOPE="${DEPLOY_SCOPE}"
-            export HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:80}"
             export MAX_WAIT_SECONDS="${MAX_WAIT_SECONDS:-120}"
 
             retry() {
